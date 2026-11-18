@@ -4,23 +4,44 @@ import br.ucsal.smartbudget.excecao.ApiException;
 import br.ucsal.smartbudget.model.Alerta;
 import br.ucsal.smartbudget.model.CategoriaOrcamento;
 import br.ucsal.smartbudget.model.Despesa;
+import br.ucsal.smartbudget.model.PrevisaoCusto;
 import br.ucsal.smartbudget.model.Viagem;
 import br.ucsal.smartbudget.repository.AlertaRepository;
 import br.ucsal.smartbudget.repository.DespesaRepository;
+import br.ucsal.smartbudget.repository.PrevisaoCustoRepository;
+import br.ucsal.smartbudget.service.ia.ServicoIA;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 @Service
 public class ServicoOrcamento {
+    private final ServicoIA servicoIA;
+    private final PrevisaoCustoRepository previsaoRepository;
     private final DespesaRepository despesaRepository;
     private final AlertaRepository alertaRepository;
 
-    public ServicoOrcamento(DespesaRepository despesaRepository, AlertaRepository alertaRepository) {
+    public ServicoOrcamento(ServicoIA servicoIA, PrevisaoCustoRepository previsaoRepository,
+                            DespesaRepository despesaRepository, AlertaRepository alertaRepository) {
+        this.servicoIA = servicoIA;
+        this.previsaoRepository = previsaoRepository;
         this.despesaRepository = despesaRepository;
         this.alertaRepository = alertaRepository;
+    }
+
+    @Transactional
+    public PrevisaoCusto gerarPrevisao(Viagem viagem) {
+        PrevisaoCusto previsao = servicoIA.preverCustos(viagem);
+        previsao.setViagem(viagem);
+        viagem.getPrevisoes().add(previsao);
+        return previsaoRepository.save(previsao);
+    }
+
+    public Optional<PrevisaoCusto> buscarUltimaPrevisao(Viagem viagem) {
+        return previsaoRepository.findFirstByViagemIdOrderByGeradaEmDesc(viagem.getId());
     }
 
     @Transactional
