@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: smart-budget-advisor
+  config:
+    import: optional:file:.env[.properties]
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/smartbudget}
+    username: ${DB_USER:smartbudget}
+    password: ${DB_PASSWORD:smartbudget}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: true
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: America/Sao_Paulo
+
+server:
+  port: ${PORT:8080}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+  base-url: https://generativelanguage.googleapis.com/v1beta
+  timeout-segundos: 8
+
+frontend:
+  url: ${FRONTEND_URL:http://localhost:5173}
+
+jwt:
+  secret: ${JWT_SECRET:troque-este-segredo-de-desenvolvimento-com-32-caracteres-ou-mais}
+  expiracao-minutos: 30
+
+app:
+  admin:
+    email: ${ADMIN_EMAIL:admin@smartbudget.com}
+    senha: ${ADMIN_SENHA:admin12345}
+  dados-demo: ${DADOS_DEMO:true}

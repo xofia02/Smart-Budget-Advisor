@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartbudget-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smartbudget
+      POSTGRES_USER: smartbudget
+      POSTGRES_PASSWORD: smartbudget
+      TZ: America/Sao_Paulo
+    ports:
+      - "5432:5432"
+    volumes:
+      - smartbudget-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartbudget -d smartbudget"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  smartbudget-data:
