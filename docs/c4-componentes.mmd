@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+    rankSpacing: 48
+---
+flowchart LR
+  subgraph web [Controllers]
+    direction TB
+    Auth[AuthController]
+    Viagem[ViagemController]
+    Orc[OrcamentoController]
+    Desp[DespesaController]
+    Ia[IaController]
+    Perfil[PerfilController]
+    Adm[AdminController]
+  end
+  subgraph domain [Servicos]
+    direction TB
+    SViagem[ViagemService]
+    SOrc[ServicoOrcamento]
+    SDesp[DespesaService]
+    SIa[IaService]
+    Gemini[GeminiClient]
+  end
+  subgraph sec [Seguranca]
+    direction TB
+    JWT[Filtro JWT]
+    CORS[CORS FRONTEND_URL]
+  end
+  Auth --> JWT
+  Viagem --> SViagem
+  Orc --> SOrc
+  Desp --> SDesp
+  Ia --> SIa
+  SIa --> Gemini
+  SOrc --> Gemini

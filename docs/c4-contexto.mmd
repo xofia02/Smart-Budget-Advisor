@@ -1,0 +1,5 @@
+flowchart LR
+    Viajante -->|navegador 5173| SBA[Smart Budget Advisor]
+    Admin -->|navegador 5173| SBA
+    SBA -->|JDBC| PG[(PostgreSQL)]
+    SBA -->|API Gemini| Gemini[Google Gemini]

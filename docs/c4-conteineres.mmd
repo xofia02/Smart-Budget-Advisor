@@ -1,0 +1,16 @@
+flowchart TB
+    subgraph client [Cliente]
+        SPA[SPA React Vite :5173]
+    end
+    subgraph server [Servidor]
+        API[API Spring Boot :8080]
+    end
+    subgraph data [Dados]
+        DB[(PostgreSQL 16)]
+    end
+    subgraph ia [Externo]
+        G[Gemini generateContent]
+    end
+    SPA -->|REST JWT Bearer| API
+    API -->|JPA| DB
+    API -->|chave no servidor| G
