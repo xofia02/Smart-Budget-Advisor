@@ -27,7 +27,7 @@ Projeto da disciplina **Tópicos Avançados em Programação**, UCSAL, 2026.2, c
 | Back-end | Java 21, Spring Boot 3.5, Spring Security com JWT, Spring Data JPA |
 | Banco de dados | PostgreSQL 16 (via Docker) |
 | Inteligência Artificial | API do Google Gemini |
-| Front-end | React |
+| Front-end | React 19, Vite e TypeScript |
 | Documentação da API | Swagger (springdoc) |
 | Testes | JUnit |
 
@@ -49,6 +49,8 @@ Projeto da disciplina **Tópicos Avançados em Programação**, UCSAL, 2026.2, c
    ```bash
    docker compose up -d
    ```
+
+   Se a porta 5432 já estiver ocupada por outro PostgreSQL, mude a porta no `docker-compose.yml` (por exemplo `5433:5432`) e ajuste o `DB_URL` no `.env`.
 
 2. Crie o arquivo de configuração a partir do modelo e coloque a sua chave do Gemini em `GEMINI_API_KEY`:
 
@@ -132,11 +134,30 @@ Os testes cobrem a validação da viagem, os alertas por categoria e a divisão 
 
 ## Como rodar o front-end
 
-Em construção. O front fica na pasta `frontend/` e roda em http://localhost:5173.
+**Você vai precisar de:** Node.js 22 ou mais novo. Suba o back-end antes.
 
-## Diagramas
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-Ficam na pasta `docs/`:
+Abra http://localhost:5173 e entre com uma das contas de demonstração. O front chama a API em http://localhost:8080. Para usar outro endereço, crie o arquivo `frontend/.env` com `VITE_API_URL=<endereço da API>`.
+
+### Telas
+
+| Tela | O que o usuário faz |
+| --- | --- |
+| Login e cadastro | Entra no sistema ou cria a conta, aceitando os termos da LGPD |
+| Início | Vê o status da API, do banco e da IA |
+| Perfil | Escolhe o estilo de viagem, cadastra viagens anteriores e pode excluir a conta |
+| Minhas viagens | Vê, cria, edita e exclui viagens |
+| Viagem | Previsão da IA, divisão do orçamento, despesas (com editar e filtrar), alertas, dicas, chat e relatório |
+| Administração | Indicadores anônimos e exclusão de contas |
+
+## Documentação
+
+Fica na pasta `docs/`:
 
 | Arquivo | O que mostra |
 | --- | --- |
@@ -144,4 +165,6 @@ Ficam na pasta `docs/`:
 | `diagrama_classes.png` | Classes do sistema (base do pacote `model`) |
 | `bpmn_parte1.pdf` e `bpmn_parte2.pdf` | Processo completo da viagem, do cadastro ao relatório (BPMN) |
 | `smart-budget-advisor-e2e.bpmn` | Arquivo editável do BPMN (abre no Camunda Modeler ou em bpmn.io) |
-
+| `c4.md` | Modelo C4 (contexto, contêineres, componentes e código) |
+| `prints/` | Capturas das telas do front-end |
+| `15-roteiro-video.md` | Roteiro dos vídeos individuais |
