@@ -19,7 +19,7 @@ import {
   listarDespesas,
   perguntarChat,
 } from '../api/viagens'
-import { CATEGORIAS, centavos, dataBr, reais, ROTULO_ALERTA, ROTULO_CATEGORIA, ROTULO_TIPO } from '../lib/formatar'
+import { CATEGORIAS, centavos, dataBr, reais, ROTULO_ALERTA, ROTULO_CATEGORIA, ROTULO_TIPO, textoValorAlerta } from '../lib/formatar'
 
 export function Viagem() {
   const id = Number(useParams().id)
@@ -387,7 +387,7 @@ export function Viagem() {
             {alertas.map((a) => (
               <li key={a.id}>
                 <span>{ROTULO_ALERTA[a.tipo]} · {ROTULO_CATEGORIA[a.categoria]}</span>
-                <strong>{reais(a.valorExcedido)}</strong>
+                <strong>{textoValorAlerta(a.tipo, a.valorExcedido)}</strong>
               </li>
             ))}
           </ul>

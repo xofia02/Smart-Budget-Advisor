@@ -37,6 +37,11 @@ export const ROTULO_ALERTA: Record<TipoAlerta, string> = {
   EXCEDIDO_100: 'Excedido (100%)',
 }
 
+export function textoValorAlerta(tipo: TipoAlerta, valorExcedido: number | string): string {
+  if (tipo === 'ATENCAO_80') return '80% usado'
+  return `+ ${reais(valorExcedido)}`
+}
+
 export const ROTULO_ESTILO: Record<EstiloViagem, string> = {
   ECONOMICO: 'Econômico',
   CONFORTAVEL: 'Confortável',
