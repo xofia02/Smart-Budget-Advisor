@@ -1,4 +1,4 @@
-import { lerToken, salvarToken } from './storage'
+import { limparSessao, lerToken, salvarToken } from './storage'
 import type { ErroApi } from './tipos'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
@@ -60,6 +60,12 @@ export async function api<T>(caminho: string, opcoes: Opcoes = {}): Promise<T> {
 
   const texto = await resposta.text()
   const dados = texto ? (JSON.parse(texto) as unknown) : null
+
+  if (resposta.status === 401 && autenticado && lerToken()) {
+    // sessão expirada (30 min sem uso): limpa os dados e volta para o login
+    limparSessao()
+    window.location.assign('/login')
+  }
 
   if (!resposta.ok) {
     const erro = dados as ErroApi | null
