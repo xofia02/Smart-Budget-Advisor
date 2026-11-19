@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.NumberFormat;
@@ -33,6 +35,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
 
@@ -247,26 +250,101 @@ public class GeminiClient implements ServicoIA {
             corpo.put("generationConfig", Map.of("responseMimeType", "application/json"));
         }
 
-        try {
-            JsonNode resposta = restClient.post()
-                    .uri("/models/{modelo}:generateContent", modelo)
-                    .header("x-goog-api-key", apiKey)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(corpo)
-                    .retrieve()
-                    .body(JsonNode.class);
-
-            JsonNode texto = resposta == null ? null
-                    : resposta.path("candidates").path(0).path("content").path("parts").path(0).path("text");
-            if (texto == null || texto.isMissingNode() || texto.asText().isBlank()) {
-                log.warn("Resposta do Gemini sem texto: {}", resposta);
-                throw iaIndisponivel("O assistente de IA não conseguiu responder a este pedido.");
+        RestClientException ultimaRede = null;
+        for (int tentativa = 1; tentativa <= 3; tentativa++) {
+            try {
+                return restClient.post()
+                        .uri("/models/{modelo}:generateContent", modelo)
+                        .header("x-goog-api-key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .body(corpo)
+                        .exchange((pedido, respostaHttp) -> lerRespostaGemini(respostaHttp));
+            } catch (GeminiOcupado e) {
+                log.warn("Gemini ocupado (modelo {}), tentativa {}/3", modelo, tentativa);
+                esperar(tentativa);
+            } catch (ApiException e) {
+                throw e;
+            } catch (RestClientException e) {
+                ultimaRede = e;
+                log.warn("Falha de rede no Gemini (modelo {}), tentativa {}/3: {}", modelo, tentativa, e.getMessage());
+                esperar(tentativa);
             }
-            return texto.asText();
-        } catch (RestClientException e) {
-            log.error("Falha ao chamar o Gemini (modelo {}): {}", modelo, e.getMessage());
+        }
+        if (ultimaRede != null) {
+            log.error("Falha ao chamar o Gemini (modelo {}): {}", modelo, ultimaRede.getMessage());
+        }
+        throw iaIndisponivel("O assistente de IA está indisponível no momento. Tente novamente em instantes.");
+    }
+
+    private void esperar(int tentativa) {
+        try {
+            Thread.sleep(2000L * tentativa);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw iaIndisponivel("O assistente de IA está indisponível no momento. Tente novamente em instantes.");
         }
+    }
+
+    private String lerRespostaGemini(RestClient.RequestHeadersSpec.ConvertibleClientHttpResponse respostaHttp)
+            throws IOException {
+        int status = respostaHttp.getStatusCode().value();
+        String tipo = respostaHttp.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+        String bruto = new String(respostaHttp.getBody().readAllBytes(), StandardCharsets.UTF_8);
+        String recorte = recortar(bruto);
+
+        if (respostaHttp.getStatusCode().isError()) {
+            log.error("Gemini HTTP {} modelo {} tipo {}: {}", status, modelo, tipo, recorte);
+            if (status == 503) {
+                throw new GeminiOcupado();
+            }
+            throw iaIndisponivel(mensagemErroGemini(bruto, status));
+        }
+
+        JsonNode resposta;
+        try {
+            resposta = objectMapper.readTree(bruto.isBlank() ? "{}" : bruto);
+        } catch (JsonProcessingException e) {
+            log.error("Gemini HTTP {} modelo {} corpo não-JSON tipo {}: {}", status, modelo, tipo, recorte);
+            throw iaIndisponivel("O assistente de IA está indisponível no momento. Tente novamente em instantes.");
+        }
+
+        if (resposta.has("error")) {
+            String detalhe = resposta.path("error").path("message").asText("");
+            log.error("Gemini HTTP {} modelo {}: {}", status, modelo, recortar(detalhe));
+            throw iaIndisponivel(mensagemErroGemini(bruto, status));
+        }
+
+        JsonNode texto = resposta.path("candidates").path(0).path("content").path("parts").path(0).path("text");
+        if (texto.isMissingNode() || texto.asText().isBlank()) {
+            log.warn("Resposta do Gemini sem texto (HTTP {}, tipo {}): {}", status, tipo, recorte);
+            throw iaIndisponivel("O assistente de IA não conseguiu responder a este pedido.");
+        }
+        return texto.asText();
+    }
+
+    private String mensagemErroGemini(String corpo, int status) {
+        try {
+            String detalhe = objectMapper.readTree(corpo).path("error").path("message").asText("");
+            if (detalhe.toLowerCase(Locale.ROOT).contains("not found")
+                    || detalhe.toLowerCase(Locale.ROOT).contains("is not found")) {
+                return "O modelo de IA configurado não está disponível para esta chave. Confira GEMINI_MODEL no .env.";
+            }
+            if (status == 401 || status == 403) {
+                return "A chave do Gemini foi recusada. Confira GEMINI_API_KEY no arquivo .env.";
+            }
+        } catch (JsonProcessingException ignored) {
+            // corpo não é JSON; mensagem genérica abaixo
+        }
+        return "O assistente de IA está indisponível no momento. Tente novamente em instantes.";
+    }
+
+    private String recortar(String texto) {
+        if (texto == null) {
+            return "";
+        }
+        String seguro = apiKey == null || apiKey.isBlank() ? texto : texto.replace(apiKey, "***");
+        return seguro.length() <= 400 ? seguro : seguro.substring(0, 400) + "…";
     }
 
     private JsonNode lerJson(String texto) {
@@ -310,5 +388,8 @@ public class GeminiClient implements ServicoIA {
     }
 
     private record Turno(boolean usuario, String texto) {
+    }
+
+    private static class GeminiOcupado extends RuntimeException {
     }
 }
