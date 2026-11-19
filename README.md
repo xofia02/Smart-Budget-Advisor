@@ -145,9 +145,3 @@ Ficam na pasta `docs/`:
 | `bpmn_parte1.pdf` e `bpmn_parte2.pdf` | Processo completo da viagem, do cadastro ao relatório (BPMN) |
 | `smart-budget-advisor-e2e.bpmn` | Arquivo editável do BPMN (abre no Camunda Modeler ou em bpmn.io) |
 
-## Como contribuir
-
-1. Pegue um cartão no Trello e mova para **Fazendo**.
-2. Crie uma branch a partir da `main`.
-3. Faça commits com o código do cartão no título, por exemplo `F2: tela de viagens`.
-4. Abra um Pull Request para a `main` e mova o cartão para **Em revisão (PR)**.
