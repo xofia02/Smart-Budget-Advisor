@@ -1,59 +1,140 @@
 # Smart Budget Advisor
 
-Trabalho de Tópicos Avançados de Programação (UCSAL). Conselheiro de orçamento de viagem: cadastro, viagens, previsão com IA, despesas, alertas, relatório, perfil e admin.
+Assistente de orçamento de viagens com Inteligência Artificial. O viajante cadastra a viagem e o orçamento, e o sistema usa o Google Gemini para prever os gastos por categoria, dar dicas de economia e responder dúvidas num chat. Durante a viagem, ele registra as despesas e recebe alertas quando uma categoria chega a 80% e a 100% do planejado.
 
-- **Backend:** Java 21, Spring Boot, PostgreSQL, JWT, Gemini — `http://localhost:8080`
-- **Frontend:** React + Vite + TypeScript — `http://localhost:5173`
-- **Swagger:** `http://localhost:8080/swagger-ui.html`
+Projeto da disciplina **Tópicos Avançados em Programação**, UCSAL, 2026.2, com o Prof. Elton Figueiredo da Silva.
+
+## Time
+
+| Integrante | Papel |
+| --- | --- |
+| Sofia Santos de Mendonça | Scrum Master e documentação |
+| Loren Vitória | Product Owner e front-end |
+| Flavio Cerqueira | Back-end e Trello |
+| João Pedro Santana Sousa | Protótipo no Figma, front-end e vídeo |
+| Cauã Maia | Modelo C4 e front-end |
+
+## Links
+
+- Trello: https://trello.com/b/KfxgHYcT
+- Protótipo no Figma: https://www.figma.com/design/ji5v5m9Ria9kmeyorOyJXH/Smart-Budget-Adivisor
+- Documentação da API (com o back-end rodando): http://localhost:8080/swagger-ui.html
+
+## Tecnologias
+
+| Parte | Tecnologia |
+| --- | --- |
+| Back-end | Java 21, Spring Boot 3.5, Spring Security com JWT, Spring Data JPA |
+| Banco de dados | PostgreSQL 16 (via Docker) |
+| Inteligência Artificial | API do Google Gemini |
+| Front-end | React 19, Vite e TypeScript |
+| Documentação da API | Swagger (springdoc) |
+| Testes | JUnit |
+
+## Estrutura do repositório
+
+| Pasta | O que tem |
+| --- | --- |
+| `backend/` | Servidor em Java com Spring Boot |
+| `frontend/` | Telas em React |
+| `docs/` | Diagramas e documentos do projeto |
+| `docker-compose.yml` | Banco de dados PostgreSQL pronto para rodar |
+
+## Como rodar o back-end
+
+**Você vai precisar de:** Java 21, Maven e Docker.
+
+1. Suba o banco de dados (na raiz do projeto):
+
+   ```bash
+   docker compose up -d
+   ```
+
+   Se a porta 5432 já estiver ocupada por outro PostgreSQL, mude a porta no `docker-compose.yml` (por exemplo `5433:5432`) e ajuste o `DB_URL` no `.env`.
+
+2. Crie o arquivo de configuração a partir do modelo e coloque a sua chave do Gemini em `GEMINI_API_KEY`:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+   A chave é gerada de graça em https://aistudio.google.com/apikey.
+
+3. Rode o servidor:
+
+   ```bash
+   cd backend
+   mvn spring-boot:run
+   ```
+
+4. Confira se está tudo certo:
+   - http://localhost:8080/api/status mostra se o servidor está no ar;
+   - http://localhost:8080/api/teste/gemini manda uma pergunta de teste para a IA;
+   - http://localhost:8080/swagger-ui.html abre todos os endpoints para testar.
+
+> **Nunca envie o arquivo `.env` para o GitHub.** Ele guarda a chave da IA e as senhas e já está no `.gitignore`. O repositório guarda só o modelo `.env.example`, sem a chave.
+
+### Variáveis do `.env`
+
+| Variável | Para que serve |
+| --- | --- |
+| `GEMINI_API_KEY` | Chave da API do Gemini (obrigatória para as funções de IA) |
+| `GEMINI_MODEL` | Modelo do Gemini usado |
+| `JWT_SECRET` | Segredo que assina o token de login (mínimo de 32 caracteres) |
+| `ADMIN_EMAIL` e `ADMIN_SENHA` | Conta do administrador criada ao iniciar |
+| `DADOS_DEMO` | `true` cria a usuária de demonstração |
+| `DB_URL`, `DB_USER` e `DB_PASSWORD` | Acesso ao banco (já batem com o `docker-compose.yml`) |
+| `FRONTEND_URL` | Endereço do front-end, liberado para chamar a API |
 
 ## Contas de demonstração
 
-| Papel | E-mail | Senha |
-|---|---|---|
-| Viajante | `ana@demo.com` | `demo12345` |
-| Admin | `admin@smartbudget.com` | `admin12345` |
+Com `DADOS_DEMO=true`, o sistema cria estas contas ao iniciar:
 
-## Como rodar
+| Perfil | E-mail | Senha |
+| --- | --- | --- |
+| Viajante (Ana Souza, com 2 viagens anteriores) | `ana@demo.com` | `demo12345` |
+| Administrador | `admin@smartbudget.com` | `admin12345` |
 
-### 1. Banco (Docker)
+São senhas só para teste local. Em outro ambiente, troque-as no `.env`.
 
-Na raiz do repositório:
+## Endpoints principais
 
-```bash
-docker compose up -d
-```
+Todos começam com `/api`. Fora cadastro, login e status, é preciso mandar o token recebido no login no cabeçalho `Authorization: Bearer <token>`.
 
-O compose publica o Postgres na porta **5432**. Se essa porta já estiver ocupada (PostgreSQL do Windows), suba o container na **5433**:
+| Grupo | Endereço | O que permite |
+| --- | --- | --- |
+| Autenticação | `/auth/cadastro`, `/auth/login`, `/auth/logout` | Criar conta, entrar e sair |
+| Conta | `DELETE /usuarios/me` | Excluir a própria conta (LGPD) |
+| Perfil | `/perfil`, `/perfil/viagens-anteriores` | Estilo de viagem e viagens anteriores |
+| Viagens | `/viagens`, `/viagens/{id}` | Criar, listar, editar e excluir viagens |
+| Despesas | `/viagens/{id}/despesas` | Registrar, editar, excluir e filtrar despesas por categoria e data |
+| Alertas | `/viagens/{id}/alertas` | Ver os alertas de 80% e 100% |
+| IA | `/viagens/{id}/previsao`, `/viagens/{id}/dicas`, `/viagens/{id}/chat`, `/chat` | Previsão de gastos, dicas e chat com o assistente |
+| Orçamento | `/viagens/{id}/orcamento/distribuir`, `/viagens/{id}/orcamento` | Dividir e ajustar o orçamento por categoria |
+| Relatório | `/viagens/{id}/relatorio` | Comparar o planejado com o gasto |
+| Administrador | `/admin/usuarios`, `/admin/indicadores` | Listar e excluir contas, ver indicadores anônimos |
 
-```bash
-docker rm -f smartbudget-db
-docker run -d --name smartbudget-db -e POSTGRES_DB=smartbudget -e POSTGRES_USER=smartbudget -e POSTGRES_PASSWORD=smartbudget -e TZ=America/Sao_Paulo -p 5433:5432 postgres:16-alpine
-```
+## Regras de negócio no servidor
 
-### 2. Backend
+- Orçamento mínimo de R$ 500,00 e viagem de 2 a 365 dias.
+- Toda viagem nova recebe as 6 categorias fixas, e a soma delas não passa do orçamento.
+- A despesa precisa ter data dentro do período da viagem.
+- Alertas quando uma categoria chega a 80% e passa de 100%.
+- Acima de 120% do orçamento, novas despesas ficam bloqueadas até o viajante revisar o orçamento.
+- Antes de ir para a IA, nome, e-mail e outros dados pessoais são retirados. A IA tem até 8 segundos para responder; se falhar, o resto do sistema continua funcionando.
+
+## Testes
 
 ```bash
 cd backend
-copy .env.example .env
+mvn test
 ```
 
-No `.env`, preencha `GEMINI_API_KEY` (Google AI Studio). Não commite o `.env`.
+Os testes cobrem a validação da viagem, os alertas por categoria e a divisão do orçamento.
 
-Se o banco estiver na 5433, defina no `.env` ou no terminal:
+## Como rodar o front-end
 
-```
-DB_URL=jdbc:postgresql://localhost:5433/smartbudget
-DB_USER=smartbudget
-DB_PASSWORD=smartbudget
-```
-
-```bash
-mvn spring-boot:run
-```
-
-Confira: `http://localhost:8080/api/status` (`iaConfigurada` fica `true` com a chave).
-
-### 3. Frontend
+**Você vai precisar de:** Node.js 22 ou mais novo. Suba o back-end antes.
 
 ```bash
 cd frontend
@@ -61,20 +142,29 @@ npm install
 npm run dev
 ```
 
-Abra `http://localhost:5173`. A URL da API está em `frontend/.env` (`VITE_API_URL=http://localhost:8080`).
+Abra http://localhost:5173 e entre com uma das contas de demonstração. O front chama a API em http://localhost:8080. Para usar outro endereço, crie o arquivo `frontend/.env` com `VITE_API_URL=<endereço da API>`.
 
-## O que o sistema faz
+### Telas
 
-Viajante: cadastro (LGPD), login, perfil e histórico, CRUD de viagens, previsão e dicas de IA, chat da viagem, orçamento em 6 categorias, despesas (inclui editar e filtrar), alertas 80%/100%, bloqueio em 120%, relatório com gráfico, exclusão da conta.
+| Tela | O que o usuário faz |
+| --- | --- |
+| Login e cadastro | Entra no sistema ou cria a conta, aceitando os termos da LGPD |
+| Início | Vê o status da API, do banco e da IA |
+| Perfil | Escolhe o estilo de viagem, cadastra viagens anteriores e pode excluir a conta |
+| Minhas viagens | Vê, cria, edita e exclui viagens |
+| Viagem | Previsão da IA, divisão do orçamento, despesas (com editar e filtrar), alertas, dicas, chat e relatório |
+| Administração | Indicadores anônimos e exclusão de contas |
 
-Admin: indicadores anônimos e exclusão de contas de viajante (sem dados financeiros).
+## Documentação
 
-## Artefatos da Unidade II
+Fica na pasta `docs/`:
 
-- Telas (prints): [docs/prints/](docs/prints/)
-- Modelo C4: [docs/c4.md](docs/c4.md)
-- Roteiro do vídeo (item 15): [docs/15-roteiro-video.md](docs/15-roteiro-video.md)
-
-## Segurança
-
-Não versione `GEMINI_API_KEY`, `JWT_SECRET` nem o arquivo `backend/.env`. O `.env.example` só tem placeholders.
+| Arquivo | O que mostra |
+| --- | --- |
+| `diagrama_caso_de_uso.svg` | Casos de uso do viajante e do administrador |
+| `diagrama_classes.png` | Classes do sistema (base do pacote `model`) |
+| `bpmn_parte1.pdf` e `bpmn_parte2.pdf` | Processo completo da viagem, do cadastro ao relatório (BPMN) |
+| `smart-budget-advisor-e2e.bpmn` | Arquivo editável do BPMN (abre no Camunda Modeler ou em bpmn.io) |
+| `c4.md` | Modelo C4 (contexto, contêineres, componentes e código) |
+| `prints/` | Capturas das telas do front-end |
+| `15-roteiro-video.md` | Roteiro dos vídeos individuais |
