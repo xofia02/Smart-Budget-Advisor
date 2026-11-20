@@ -315,12 +315,17 @@ public class GeminiClient implements ServicoIA {
             throw iaIndisponivel(mensagemErroGemini(bruto, status));
         }
 
-        JsonNode texto = resposta.path("candidates").path(0).path("content").path("parts").path(0).path("text");
-        if (texto.isMissingNode() || texto.asText().isBlank()) {
+        StringBuilder texto = new StringBuilder();
+        for (JsonNode parte : resposta.path("candidates").path(0).path("content").path("parts")) {
+            if (!parte.path("thought").asBoolean(false)) {
+                texto.append(parte.path("text").asText(""));
+            }
+        }
+        if (texto.toString().isBlank()) {
             log.warn("Resposta do Gemini sem texto (HTTP {}, tipo {}): {}", status, tipo, recorte);
             throw iaIndisponivel("O assistente de IA não conseguiu responder a este pedido.");
         }
-        return texto.asText();
+        return texto.toString();
     }
 
     private String mensagemErroGemini(String corpo, int status) {
