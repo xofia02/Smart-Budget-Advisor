@@ -116,7 +116,7 @@ jobs:
           await api(`/viagens/${p.id}/despesas`, { method: 'POST', token: ana, body: { categoria: 'ALIMENTACAO', valor: 60, data: '2027-01-17', descricao: 'Almoço' } })
 
           // ---------- prints ----------
-          const browser = await chromium.launch()
+          const browser = await chromium.launch({ args: ['--lang=pt-BR'], env: { ...process.env, LANG: 'pt_BR.UTF-8', LANGUAGE: 'pt_BR:pt', LC_ALL: 'pt_BR.UTF-8' } })
           const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.5, locale: 'pt-BR', timezoneId: 'America/Bahia' })
           const page = await ctx.newPage()
           page.setDefaultTimeout(20000)
@@ -194,6 +194,17 @@ jobs:
               v.write_text(t.replace(velho, novo), encoding='utf-8'); print('alerta: corrigido')
           else:
               print('alerta: trecho não encontrado (já corrigido?)')
+
+          # 1b) campos sem "type" (destino do perfil e pergunta do chat) ficavam sem estilo
+          c = raiz / 'frontend/src/index.css'
+          tc = c.read_text(encoding='utf-8')
+          if "input:not([type])" not in tc:
+              c.write_text(tc.replace("input[type='text'],\n", "input:not([type]),\ninput[type='text'],\n", 1), encoding='utf-8'); print('css: corrigido')
+          # 1c) chat: tira os ** de negrito que a IA manda em markdown
+          t = v.read_text(encoding='utf-8')
+          velho = "{m.conteudo}</p>"
+          if velho in t:
+              v.write_text(t.replace(velho, "{m.conteudo.replace(/\\*\\*(.+?)\\*\\*/g, '$1')}</p>"), encoding='utf-8'); print('chat: corrigido')
 
           # 2) arquivos do modelo do Vite que não são usados
           for f in ['frontend/src/App.css', 'frontend/src/assets/hero.png', 'frontend/src/assets/react.svg',
@@ -388,7 +399,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A frontend
-          git commit -m "F: alerta de 80% mostra o percentual e remove arquivos sem uso" || true
+          git commit -m "F: ajustes visuais (campos do perfil e do chat, texto do chat)" || true
           if ls ../tools/out/*.png > /dev/null 2>&1 && [ ! -f ../tools/out/erro.png ]; then
             rm -f docs/prints/*.png
             cp ../tools/out/*.png docs/prints/
