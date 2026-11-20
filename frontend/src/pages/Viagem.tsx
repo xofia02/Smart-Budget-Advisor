@@ -387,7 +387,7 @@ export function Viagem() {
             {alertas.map((a) => (
               <li key={a.id}>
                 <span>{ROTULO_ALERTA[a.tipo]} · {ROTULO_CATEGORIA[a.categoria]}</span>
-                <strong>{reais(a.valorExcedido)}</strong>
+                <strong>{a.tipo === 'EXCEDIDO_100' ? `+ ${reais(a.valorExcedido)}` : '80% usado'}</strong>
               </li>
             ))}
           </ul>
