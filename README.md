@@ -121,7 +121,7 @@ Todos começam com `/api`. Fora cadastro, login e status, é preciso mandar o to
 - A despesa precisa ter data dentro do período da viagem.
 - Alertas quando uma categoria chega a 80% e passa de 100%.
 - Acima de 120% do orçamento, novas despesas ficam bloqueadas até o viajante revisar o orçamento.
-- Antes de ir para a IA, nome, e-mail e outros dados pessoais são retirados. A IA tem até 8 segundos para responder; se falhar, o resto do sistema continua funcionando.
+- Antes de ir para a IA, nome, e-mail e outros dados pessoais são retirados. O sistema espera até 90 segundos pela IA e tenta de novo até 3 vezes quando o Google está ocupado; se mesmo assim falhar, mostra uma mensagem e o resto do sistema continua funcionando.
 
 ## Testes
 
@@ -131,6 +131,16 @@ mvn test
 ```
 
 Os testes cobrem a validação da viagem, os alertas por categoria e a divisão do orçamento.
+
+## Backup do banco de dados
+
+O backup é feito direto no PostgreSQL, fora das telas do sistema:
+
+```bash
+docker exec smartbudget-db pg_dump -U smartbudget smartbudget > backup.sql
+```
+
+Para restaurar: `docker exec -i smartbudget-db psql -U smartbudget smartbudget < backup.sql`.
 
 ## Como rodar o front-end
 
@@ -166,6 +176,4 @@ Fica na pasta `docs/`:
 | `bpmn_parte1.pdf` e `bpmn_parte2.pdf` | Processo completo da viagem, do cadastro ao relatório (BPMN) |
 | `smart-budget-advisor-e2e.bpmn` | Arquivo editável do BPMN (abre no Camunda Modeler ou em bpmn.io) |
 | `c4/` | Figuras do modelo C4: contexto, contêineres e componentes (PDF e PNG) |
-| `c4.md` | Modelo C4 em texto (Mermaid) |
 | `prints/` | Capturas das telas do front-end |
-| `15-roteiro-video.md` | Roteiro dos vídeos individuais |
