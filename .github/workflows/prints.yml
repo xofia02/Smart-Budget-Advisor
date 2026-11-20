@@ -1,0 +1,409 @@
+name: Testes e prints
+
+on:
+  push:
+    branches: [prints]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  testes-e-prints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: smartbudget
+          POSTGRES_USER: smartbudget
+          POSTGRES_PASSWORD: smartbudget
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smartbudget"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Baixar a main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: app
+          fetch-depth: 0
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: app/backend/pom.xml
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Criar os scripts
+        run: |
+          mkdir -p tools/c4
+          cat > tools/prints.mjs <<'FIM_ARQUIVO'
+          import { chromium } from 'playwright'
+          import fs from 'node:fs'
+
+          const API = 'http://localhost:8080/api'
+          const WEB = 'http://localhost:5173'
+          const OUT = process.argv[2] || 'out'
+          fs.mkdirSync(OUT, { recursive: true })
+          const DEMO = '@' + 'demo.com'
+          const ADM = '@' + 'smartbudget.com'
+          const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
+
+          async function api(caminho, { method = 'GET', body, token } = {}) {
+            const headers = {}
+            if (body !== undefined) headers['Content-Type'] = 'application/json'
+            if (token) headers.Authorization = 'Bearer ' + token
+            const r = await fetch(API + caminho, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+            const t = await r.text()
+            let d = null
+            try { d = t ? JSON.parse(t) : null } catch { d = t }
+            log(method, caminho, r.status)
+            if (!r.ok) { log('  resposta:', String(t).slice(0, 300)); return null }
+            return d
+          }
+
+          // ---------- dados de demonstração ----------
+          const ana = (await api('/auth/login', { method: 'POST', body: { email: 'ana' + DEMO, senha: 'demo12345' } })).token
+          await api('/auth/cadastro', { method: 'POST', body: { nome: 'Viajante Exemplo Um', email: 'viajante1' + DEMO, senha: 'demo12345', consentimentoLGPD: true } })
+          await api('/auth/cadastro', { method: 'POST', body: { nome: 'Viajante Exemplo Dois', email: 'viajante2' + DEMO, senha: 'demo12345', consentimentoLGPD: true } })
+
+          const g = await api('/viagens', { method: 'POST', token: ana, body: { destino: 'Gramado/RS', dataInicio: '2026-12-10', dataFim: '2026-12-14', orcamentoTotal: 6000, tipo: 'CASAL' } })
+          const previsao = await api(`/viagens/${g.id}/previsao`, { method: 'POST', token: ana })
+          log('previsão da IA:', previsao ? 'ok' : 'FALHOU')
+          let det = await api(`/viagens/${g.id}/orcamento/distribuir`, { method: 'POST', token: ana })
+          if (!det || !det.categorias) det = await api(`/viagens/${g.id}`, { token: ana })
+          const aloc = Object.fromEntries(det.categorias.map((c) => [c.categoria, Number(c.valorAlocado)]))
+          log('alocação:', JSON.stringify(aloc))
+          const r2 = (v) => Math.round(v * 100) / 100
+          const despesasGramado = [
+            ['HOSPEDAGEM', r2(aloc.HOSPEDAGEM * 0.85), '2026-12-10', 'Hotel no centro (4 noites)'],
+            ['TRANSPORTE', r2(Math.min(320, aloc.TRANSPORTE * 0.5)), '2026-12-10', 'Transfer do aeroporto de Porto Alegre'],
+            ['ALIMENTACAO', 180, '2026-12-11', 'Jantar de fondue'],
+            ['ALIMENTACAO', 95.5, '2026-12-12', 'Café colonial'],
+            ['PASSEIOS', r2(aloc.PASSEIOS * 1.1), '2026-12-12', 'Snowland e Mini Mundo'],
+            ['COMPRAS', r2(Math.min(150, aloc.COMPRAS * 0.5)), '2026-12-13', 'Chocolates artesanais'],
+          ]
+          for (const [categoria, valor, data, descricao] of despesasGramado) {
+            await api(`/viagens/${g.id}/despesas`, { method: 'POST', token: ana, body: { categoria, valor, data, descricao } })
+          }
+          log('dicas:', (await api(`/viagens/${g.id}/dicas`, { method: 'POST', token: ana })) ? 'ok' : 'FALHOU')
+          log('chat:', (await api(`/viagens/${g.id}/chat`, { method: 'POST', token: ana, body: { pergunta: 'Quanto devo reservar por dia para comer em Gramado?' } })) ? 'ok' : 'FALHOU')
+
+          const s = await api('/viagens', { method: 'POST', token: ana, body: { destino: 'Salvador/BA', dataInicio: '2027-02-12', dataFim: '2027-02-17', orcamentoTotal: 3500, tipo: 'FAMILIA' } })
+
+          const p = await api('/viagens', { method: 'POST', token: ana, body: { destino: 'Porto de Galinhas/PE', dataInicio: '2027-01-15', dataFim: '2027-01-19', orcamentoTotal: 800, tipo: 'INDIVIDUAL' } })
+          await api(`/viagens/${p.id}/orcamento/distribuir`, { method: 'POST', token: ana })
+          for (const [categoria, valor, data, descricao] of [
+            ['HOSPEDAGEM', 700, '2027-01-15', 'Pousada (4 noites)'],
+            ['PASSEIOS', 400, '2027-01-16', 'Passeio de jangada e buggy'],
+          ]) {
+            await api(`/viagens/${p.id}/despesas`, { method: 'POST', token: ana, body: { categoria, valor, data, descricao } })
+          }
+          // tenta lançar mais uma: deve voltar 423 (bloqueada)
+          await api(`/viagens/${p.id}/despesas`, { method: 'POST', token: ana, body: { categoria: 'ALIMENTACAO', valor: 60, data: '2027-01-17', descricao: 'Almoço' } })
+
+          // ---------- prints ----------
+          const browser = await chromium.launch()
+          const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.5, locale: 'pt-BR', timezoneId: 'America/Bahia' })
+          const page = await ctx.newPage()
+          page.setDefaultTimeout(20000)
+
+          async function tela(nome, opcoes = {}) {
+            await page.waitForLoadState('networkidle').catch(() => {})
+            await page.waitForTimeout(700)
+            await page.screenshot({ path: `${OUT}/${nome}.png`, ...opcoes })
+            log('print', nome)
+          }
+          async function cartao(nome, titulo) {
+            const c = page.locator('section.cartao', { has: page.getByRole('heading', { name: titulo, exact: true }) }).first()
+            await c.scrollIntoViewIfNeeded()
+            await page.waitForTimeout(500)
+            await c.screenshot({ path: `${OUT}/${nome}.png` })
+            log('print', nome)
+          }
+          async function entrar(email, senha) {
+            await page.goto(WEB + '/login')
+            await page.getByLabel('E-mail').fill(email)
+            await page.getByLabel('Senha').fill(senha)
+            await page.getByRole('button', { name: 'Entrar' }).click()
+            await page.waitForURL((u) => !u.pathname.startsWith('/login'))
+          }
+
+          try {
+            await page.goto(WEB + '/login'); await tela('01-login')
+            await page.goto(WEB + '/cadastro'); await tela('02-cadastro')
+            await entrar('ana' + DEMO, 'demo12345')
+            await page.goto(WEB + '/'); await page.getByText('Sistema').first().waitFor(); await tela('03-inicio')
+            await page.goto(WEB + '/perfil'); await tela('04-perfil', { fullPage: true })
+            await page.goto(WEB + '/viagens'); await tela('05-viagens', { fullPage: true })
+            await page.goto(WEB + '/viagens/nova'); await tela('06-nova-viagem')
+            await page.goto(`${WEB}/viagens/${g.id}/editar`); await page.waitForTimeout(800); await tela('07-editar-viagem')
+            await page.goto(`${WEB}/viagens/${g.id}`)
+            await page.getByRole('heading', { name: 'Resumo', exact: true }).waitFor()
+            await tela('08-viagem-detalhe')
+            await tela('08-viagem-completa', { fullPage: true })
+            for (const [nome, titulo] of [
+              ['08a-resumo', 'Resumo'], ['08b-previsao', 'Previsão da IA'], ['08c-orcamento', 'Orçamento'],
+              ['08d-despesas', 'Despesas'], ['08f-alertas', 'Alertas'], ['08g-dicas', 'Dicas de economia'],
+              ['08h-chat', 'Chat'], ['08i-relatorio', 'Relatório'],
+            ]) await cartao(nome, titulo)
+            // filtro de despesas: Alimentação
+            await page.getByLabel('Filtrar categoria').selectOption('ALIMENTACAO')
+            await page.getByRole('button', { name: 'Filtrar', exact: true }).click()
+            await page.waitForTimeout(1500)
+            await cartao('08e-filtro-despesas', 'Despesas')
+            // viagem bloqueada
+            await page.goto(`${WEB}/viagens/${p.id}`)
+            await page.getByRole('heading', { name: 'Resumo', exact: true }).waitFor()
+            await cartao('10-viagem-bloqueada', 'Despesas')
+            // administrador
+            await page.getByRole('button', { name: 'Sair' }).click()
+            await page.waitForURL(/\/login/)
+            await entrar('admin' + ADM, 'admin12345')
+            await page.goto(WEB + '/admin'); await page.waitForTimeout(800); await tela('09-admin', { fullPage: true })
+          } catch (e) {
+            log('ERRO nos prints:', e.message)
+            await page.screenshot({ path: `${OUT}/erro.png`, fullPage: true }).catch(() => {})
+            process.exitCode = 1
+          }
+          await browser.close()
+          FIM_ARQUIVO
+          cat > tools/ajustes.py <<'FIM_ARQUIVO'
+          import pathlib, re, sys
+          raiz = pathlib.Path(sys.argv[1])
+
+          # 1) alerta de 80% mostra o percentual em vez de "R$ 0,00"
+          v = raiz / 'frontend/src/pages/Viagem.tsx'
+          t = v.read_text(encoding='utf-8')
+          velho = '<strong>{reais(a.valorExcedido)}</strong>'
+          novo = "<strong>{a.tipo === 'EXCEDIDO_100' ? `+ ${reais(a.valorExcedido)}` : '80% usado'}</strong>"
+          if velho in t:
+              v.write_text(t.replace(velho, novo), encoding='utf-8'); print('alerta: corrigido')
+          else:
+              print('alerta: trecho não encontrado (já corrigido?)')
+
+          # 2) arquivos do modelo do Vite que não são usados
+          for f in ['frontend/src/App.css', 'frontend/src/assets/hero.png', 'frontend/src/assets/react.svg',
+                    'frontend/src/assets/vite.svg', 'frontend/public/icons.svg']:
+              p = raiz / f
+              if p.exists():
+                  p.unlink(); print('removido', f)
+          FIM_ARQUIVO
+          cat > tools/docs.py <<'FIM_ARQUIVO'
+          import pathlib, sys
+          raiz = pathlib.Path(sys.argv[1])
+          r = raiz / 'README.md'
+          t = r.read_text(encoding='utf-8')
+          velho = "| `c4.md` | Modelo C4 (contexto, contêineres, componentes e código) |"
+          novo = ("| `c4/` | Figuras do modelo C4: contexto, contêineres e componentes (PDF e PNG) |\n"
+                  "| `c4.md` | Modelo C4 em texto (Mermaid) |")
+          if velho in t and '`c4/`' not in t:
+              t = t.replace(velho, novo)
+          r.write_text(t, encoding='utf-8')
+
+          linhas = [
+              ('01-login.png', 'Login', 'RF-001'),
+              ('02-cadastro.png', 'Cadastro com consentimento LGPD', 'RF-001, RNF-005'),
+              ('03-inicio.png', 'Início e status do sistema', '-'),
+              ('04-perfil.png', 'Perfil, estilo de viagem e viagens anteriores', 'RF-002'),
+              ('05-viagens.png', 'Minhas viagens', 'RF-003'),
+              ('06-nova-viagem.png', 'Nova viagem', 'RF-003'),
+              ('07-editar-viagem.png', 'Editar viagem', 'RF-003'),
+              ('08-viagem-detalhe.png', 'Detalhe da viagem (topo)', 'RF-003'),
+              ('08-viagem-completa.png', 'Detalhe da viagem (página inteira)', 'RF-003 a RF-010'),
+              ('08a-resumo.png', 'Resumo da viagem', 'RF-003'),
+              ('08b-previsao.png', 'Previsão da IA (mínimo, recomendado e máximo)', 'RF-004'),
+              ('08c-orcamento.png', 'Divisão do orçamento nas 6 categorias', 'RF-005'),
+              ('08d-despesas.png', 'Despesas: lançar, editar e excluir', 'RF-006'),
+              ('08e-filtro-despesas.png', 'Despesas filtradas por categoria', 'RF-006'),
+              ('08f-alertas.png', 'Alertas de 80% e 100%', 'RF-007'),
+              ('08g-dicas.png', 'Dicas de economia', 'RF-009'),
+              ('08h-chat.png', 'Chat com o assistente', 'RF-008'),
+              ('08i-relatorio.png', 'Relatório com gráfico', 'RF-010'),
+              ('10-viagem-bloqueada.png', 'Viagem bloqueada acima de 120%', 'RN-006'),
+              ('09-admin.png', 'Painel do administrador', 'Administrador'),
+          ]
+          pasta = raiz / 'docs/prints'
+          md = ['# Prints das telas (item 13)', '',
+                'Capturas do sistema rodando (http://localhost:5173), com a conta de demonstração da Ana e a do administrador.', '',
+                '| Arquivo | Tela | Requisito |', '| --- | --- | --- |']
+          for arq, tela, req in linhas:
+              if (pasta / arq).exists():
+                  md.append(f'| [{arq}]({arq}) | {tela} | {req} |')
+          (pasta / 'README.md').write_text('\n'.join(md) + '\n', encoding='utf-8')
+          print('docs atualizados')
+          FIM_ARQUIVO
+          cd tools
+          cat > c4/c4_nivel1_contexto.dot <<'FIM_ARQUIVO'
+          digraph G {
+            graph [fontname="Helvetica", rankdir=TB, nodesep=0.6, ranksep=0.8, pad=0.3, labelloc=t, fontsize=16];
+            node [fontname="Helvetica", shape=box, style="rounded,filled", fontcolor=white, color="#073b6f", penwidth=1.2, margin="0.25,0.15", width=2.6];
+            edge [fontname="Helvetica", fontsize=10, color="#555555", fontcolor="#333333", arrowsize=0.8];
+
+            label="Nível 1 - Contexto";
+            viajante [label=<<B>Viajante</B><BR/><FONT POINT-SIZE="10">[Pessoa]</FONT><BR/><BR/><FONT POINT-SIZE="11">Planeja a viagem, registra despesas<BR/>e conversa com o assistente</FONT>>, fillcolor="#08427b"];
+            admin [label=<<B>Administrador</B><BR/><FONT POINT-SIZE="10">[Pessoa]</FONT><BR/><BR/><FONT POINT-SIZE="11">Gerencia contas e consulta<BR/>indicadores anônimos</FONT>>, fillcolor="#08427b"];
+            sba [label=<<B>Smart Budget Advisor</B><BR/><FONT POINT-SIZE="10">[Sistema]</FONT><BR/><BR/><FONT POINT-SIZE="11">Planejamento e controle do<BR/>orçamento de viagem com IA</FONT>>, fillcolor="#1168bd", color="#0b4884"];
+            gemini [label=<<B>Google Gemini</B><BR/><FONT POINT-SIZE="10">[Sistema externo]</FONT><BR/><BR/><FONT POINT-SIZE="11">Gera previsões, dicas<BR/>e respostas do chat</FONT>>, fillcolor="#8a8a8a", color="#6b6b6b"];
+            {rank=same; viajante; admin;}
+            viajante -> sba [label="  Usa pelo navegador"];
+            admin -> sba [label="  Administra pelo navegador"];
+            sba -> gemini [label="  Envia dados da viagem, sem\n  dados pessoais (HTTPS/JSON)"];
+          }
+          FIM_ARQUIVO
+          cat > c4/c4_nivel2_conteineres.dot <<'FIM_ARQUIVO'
+          digraph G {
+            graph [fontname="Helvetica", rankdir=TB, nodesep=0.6, ranksep=0.8, pad=0.3, labelloc=t, fontsize=16];
+            node [fontname="Helvetica", shape=box, style="rounded,filled", fontcolor=white, color="#073b6f", penwidth=1.2, margin="0.25,0.15", width=2.6];
+            edge [fontname="Helvetica", fontsize=10, color="#555555", fontcolor="#333333", arrowsize=0.8];
+
+            label="Nível 2 - Contêineres";
+            viajante [label=<<B>Viajante</B><BR/><FONT POINT-SIZE="10">[Pessoa]</FONT>>, fillcolor="#08427b"];
+            admin [label=<<B>Administrador</B><BR/><FONT POINT-SIZE="10">[Pessoa]</FONT>>, fillcolor="#08427b"];
+            {rank=same; viajante; admin;}
+            subgraph cluster_sba {
+              label=<<B>Smart Budget Advisor</B> [Sistema]>; style="dashed"; color="#444444"; fontcolor="#222222"; fontsize=13; margin=20;
+              web [label=<<B>Aplicação web</B><BR/><FONT POINT-SIZE="10">[React 19, Vite e TypeScript]</FONT><BR/><BR/><FONT POINT-SIZE="11">Telas do viajante e<BR/>do administrador</FONT>>, fillcolor="#438dd5", color="#3c7fc0"];
+              api [label=<<B>API</B><BR/><FONT POINT-SIZE="10">[Java 21 e Spring Boot 3.5]</FONT><BR/><BR/><FONT POINT-SIZE="11">Regras de negócio, segurança<BR/>com JWT e integração com a IA</FONT>>, fillcolor="#438dd5", color="#3c7fc0"];
+              db [label=<<B>Banco de dados</B><BR/><FONT POINT-SIZE="10">[PostgreSQL 16]</FONT><BR/><BR/><FONT POINT-SIZE="11">Usuários, viagens, despesas,<BR/>alertas, previsões e relatórios</FONT>>, shape=cylinder, style="filled", fillcolor="#438dd5", color="#3c7fc0"];
+            }
+            gemini [label=<<B>Google Gemini</B><BR/><FONT POINT-SIZE="10">[Sistema externo]</FONT><BR/><BR/><FONT POINT-SIZE="11">API de IA generativa</FONT>>, fillcolor="#8a8a8a", color="#6b6b6b"];
+            viajante -> web [label="  Usa (HTTPS)"];
+            admin -> web [label="  Usa (HTTPS)"];
+            web -> api [label="  Chama a API\n  (REST/JSON + token JWT)"];
+            api -> db [label="  Lê e grava (JPA)"];
+            api -> gemini [label="  generateContent\n  (HTTPS/JSON)"];
+
+          }
+          FIM_ARQUIVO
+          cat > c4/c4_nivel3_componentes.dot <<'FIM_ARQUIVO'
+          digraph G {
+            graph [fontname="Helvetica", rankdir=TB, nodesep=0.35, ranksep=0.8, pad=0.3, labelloc=t, fontsize=16];
+            node [fontname="Helvetica", shape=box, style="rounded,filled", fontcolor=white, color="#073b6f", penwidth=1.2, margin="0.25,0.15", width=2.2];
+            edge [fontname="Helvetica", fontsize=10, color="#555555", fontcolor="#333333", arrowsize=0.8];
+
+            label="Nível 3 - Componentes da API";
+            web [label=<<B>Aplicação web</B><BR/><FONT POINT-SIZE="10">[Contêiner: React]</FONT>>, fillcolor="#438dd5", color="#3c7fc0"];
+            subgraph cluster_api {
+              label=<<B>API</B> [Contêiner: Java 21 e Spring Boot]>; style="dashed"; color="#444444"; fontcolor="#222222"; fontsize=13; margin=18;
+              filtro [label=<<B>JwtAuthFilter</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Confere o token<BR/>de cada pedido</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+              subgraph cluster_ctrl { label="Controllers"; style="rounded"; color="#9db8d6"; fontcolor="#2a4a6b"; fontsize=12;
+                ac [label=<<B>AuthController</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Cadastro, login e logout</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"]; pc [label=<<B>PerfilController</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Perfil e viagens anteriores</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+                vc [label=<<B>ViagemController</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">CRUD de viagens</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"]; dc [label=<<B>DespesaController</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Despesas e alertas</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+                oc [label=<<B>OrcamentoController</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Divisão e relatório</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"]; ic [label=<<B>IaController</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Previsão, dicas e chat</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+                adc [label=<<B>AdminController</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Contas e indicadores</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+              }
+              subgraph cluster_srv { label="Services (regras de negócio)"; style="rounded"; color="#9db8d6"; fontcolor="#2a4a6b"; fontsize=12;
+                as [label=<<B>AuthService</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Senha BCrypt e token JWT</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"]; ps [label=<<B>PerfilService</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Estilo e histórico</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+                vs [label=<<B>ViagemService</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Validação da viagem</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"]; ds [label=<<B>DespesaService</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Despesas e alertas</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+                so [label=<<B>ServicoOrcamento</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Previsão, divisão, bloqueio<BR/>de 120% e relatório</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"]; is [label=<<B>IaService</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Dicas e chat</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+                ads [label=<<B>AdminService</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Indicadores anônimos</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+              }
+              gc [label=<<B>GeminiClient</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Implementa ServicoIA;<BR/>retira dados pessoais</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+              repo [label=<<B>Repositories</B><BR/><FONT POINT-SIZE="10">[Componente]</FONT><BR/><BR/><FONT POINT-SIZE="11">Spring Data JPA</FONT>>, fillcolor="#85bbf0", color="#5d82a8", fontcolor="#0b2540"];
+            }
+            db [label=<<B>Banco de dados</B><BR/><FONT POINT-SIZE="10">[Contêiner: PostgreSQL 16]</FONT>>, shape=cylinder, style="filled", fillcolor="#438dd5", color="#3c7fc0"];
+            gemini [label=<<B>Google Gemini</B><BR/><FONT POINT-SIZE="10">[Sistema externo]</FONT>>, fillcolor="#8a8a8a", color="#6b6b6b"];
+            web -> filtro [label="  REST/JSON + JWT"];
+            filtro -> {ac pc vc dc oc ic adc} [color="#888888", arrowsize=0.6];
+            ac -> as; pc -> ps; vc -> vs; dc -> ds; oc -> so; ic -> so; ic -> is; adc -> ads;
+            ds -> so;
+            so -> gc [label=" ServicoIA"]; is -> gc [label=" ServicoIA"];
+            {as ps vs ds so is ads} -> repo [color="#888888", arrowsize=0.6];
+            repo -> db [label="  JPA/JDBC"];
+            gc -> gemini [label="  HTTPS/JSON"];
+
+
+          }
+          FIM_ARQUIVO
+
+      - name: Ajustes no codigo (alerta de 80% e limpeza)
+        run: python3 tools/ajustes.py app
+
+      - name: Testes do back-end (JUnit)
+        working-directory: app/backend
+        run: mvn -B test
+
+      - name: Build do front-end
+        working-directory: app/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Subir o back-end
+        working-directory: app/backend
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          nohup mvn -B -q spring-boot:run > ../../back.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8080/api/status > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -s http://localhost:8080/api/status; echo
+
+      - name: Subir o front-end
+        working-directory: app/frontend
+        run: |
+          nohup npm run dev -- --host 127.0.0.1 > ../../front.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5173 > /dev/null; then break; fi
+            sleep 1
+          done
+
+      - name: Dados de demonstracao e prints
+        working-directory: tools
+        run: |
+          npm init -y > /dev/null
+          npm install playwright@1.55.0 > /dev/null
+          npx playwright install --with-deps chromium > /dev/null
+          node prints.mjs out
+
+      - name: Figuras do C4
+        run: |
+          sudo apt-get install -y graphviz > /dev/null
+          mkdir -p app/docs/c4
+          for f in tools/c4/*.dot; do
+            n=$(basename "$f" .dot)
+            dot -Tpdf "$f" -o "app/docs/c4/$n.pdf"
+            dot -Tpng -Gdpi=150 "$f" -o "app/docs/c4/$n.png"
+          done
+
+      - name: Salvar na main
+        working-directory: app
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A frontend
+          git commit -m "F: alerta de 80% mostra o percentual e remove arquivos sem uso" || true
+          if ls ../tools/out/*.png > /dev/null 2>&1 && [ ! -f ../tools/out/erro.png ]; then
+            rm -f docs/prints/*.png
+            cp ../tools/out/*.png docs/prints/
+          fi
+          python3 ../tools/docs.py .
+          git add -A docs README.md
+          git commit -m "D3: prints novos das telas e figuras do C4" || true
+          git push origin HEAD:main
+
+      - name: Guardar os logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-e-prints
+          path: |
+            back.log
+            front.log
+            tools/out/
