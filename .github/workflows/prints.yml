@@ -206,6 +206,31 @@ jobs:
           if velho in t:
               v.write_text(t.replace(velho, "{m.conteudo.replace(/\\*\\*(.+?)\\*\\*/g, '$1')}</p>"), encoding='utf-8'); print('chat: corrigido')
 
+          # 1d) Gemini: junta todas as partes da resposta (antes só lia a primeira e o chat saía cortado)
+          g = raiz / 'backend/src/main/java/br/ucsal/smartbudget/service/ia/GeminiClient.java'
+          tg = g.read_text(encoding='utf-8')
+          velho_g = """        JsonNode texto = resposta.path("candidates").path(0).path("content").path("parts").path(0).path("text");
+                  if (texto.isMissingNode() || texto.asText().isBlank()) {
+                      log.warn("Resposta do Gemini sem texto (HTTP {}, tipo {}): {}", status, tipo, recorte);
+                      throw iaIndisponivel("O assistente de IA não conseguiu responder a este pedido.");
+                  }
+                  return texto.asText();"""
+          novo_g = """        StringBuilder texto = new StringBuilder();
+                  for (JsonNode parte : resposta.path("candidates").path(0).path("content").path("parts")) {
+                      if (!parte.path("thought").asBoolean(false)) {
+                          texto.append(parte.path("text").asText(""));
+                      }
+                  }
+                  if (texto.toString().isBlank()) {
+                      log.warn("Resposta do Gemini sem texto (HTTP {}, tipo {}): {}", status, tipo, recorte);
+                      throw iaIndisponivel("O assistente de IA não conseguiu responder a este pedido.");
+                  }
+                  return texto.toString();"""
+          if velho_g in tg:
+              g.write_text(tg.replace(velho_g, novo_g), encoding='utf-8'); print('gemini: corrigido')
+          else:
+              print('gemini: trecho não encontrado')
+
           # 2) arquivos do modelo do Vite que não são usados
           for f in ['frontend/src/App.css', 'frontend/src/assets/hero.png', 'frontend/src/assets/react.svg',
                     'frontend/src/assets/vite.svg', 'frontend/public/icons.svg']:
@@ -398,6 +423,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A backend
+          git commit -m "B5: usa todas as partes da resposta do Gemini" || true
           git add -A frontend
           git commit -m "F: ajustes visuais (campos do perfil e do chat, texto do chat)" || true
           if ls ../tools/out/*.png > /dev/null 2>&1 && [ ! -f ../tools/out/erro.png ]; then
