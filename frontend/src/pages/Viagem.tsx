@@ -417,7 +417,7 @@ export function Viagem() {
         <div className="chat">
           {chat.length === 0 ? <p className="muted">Pergunte sobre gastos neste destino.</p> : null}
           {chat.map((m) => (
-            <p key={m.id} className={m.papel === 'USUARIO' ? 'eu' : 'ia'}>{m.conteudo}</p>
+            <p key={m.id} className={m.papel === 'USUARIO' ? 'eu' : 'ia'}>{m.conteudo.replace(/\*\*(.+?)\*\*/g, '$1')}</p>
           ))}
         </div>
         <form
