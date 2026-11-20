@@ -165,6 +165,7 @@ Fica na pasta `docs/`:
 | `diagrama_classes.png` | Classes do sistema (base do pacote `model`) |
 | `bpmn_parte1.pdf` e `bpmn_parte2.pdf` | Processo completo da viagem, do cadastro ao relatório (BPMN) |
 | `smart-budget-advisor-e2e.bpmn` | Arquivo editável do BPMN (abre no Camunda Modeler ou em bpmn.io) |
-| `c4.md` | Modelo C4 (contexto, contêineres, componentes e código) |
+| `c4/` | Figuras do modelo C4: contexto, contêineres e componentes (PDF e PNG) |
+| `c4.md` | Modelo C4 em texto (Mermaid) |
 | `prints/` | Capturas das telas do front-end |
 | `15-roteiro-video.md` | Roteiro dos vídeos individuais |
