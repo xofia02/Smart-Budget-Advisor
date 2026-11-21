@@ -18,5 +18,35 @@ services:
       timeout: 3s
       retries: 10
 
+  backend:
+    build: ./backend
+    container_name: smartbudget-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: ./backend/.env.example
+        required: false
+    environment:
+      DB_URL: jdbc:postgres://postgres:5432/smartbudget
+      DB_USER: smartbudget
+      DB_PASSWORD: smartbudget
+      FRONTEND_URL: http://localhost:5173
+      ports:
+        - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8080
+    container_name: smartbudget-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
 volumes:
   smartbudget-data:

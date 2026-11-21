@@ -25,7 +25,8 @@ Projeto da disciplina **Tópicos Avançados em Programação**, UCSAL, 2026.2, c
 | Parte | Tecnologia |
 | --- | --- |
 | Back-end | Java 21, Spring Boot 3.5, Spring Security com JWT, Spring Data JPA |
-| Banco de dados | PostgreSQL 16 (via Docker) |
+| Banco de dados | PostgreSQL 16 |
+| Execução | Docker e Docker Compose (banco, back-end e front-end) |
 | Inteligência Artificial | API do Google Gemini |
 | Front-end | React 19, Vite e TypeScript |
 | Documentação da API | Swagger (springdoc) |
@@ -38,16 +39,48 @@ Projeto da disciplina **Tópicos Avançados em Programação**, UCSAL, 2026.2, c
 | `backend/` | Servidor em Java com Spring Boot |
 | `frontend/` | Telas em React |
 | `docs/` | Diagramas e documentos do projeto |
-| `docker-compose.yml` | Banco de dados PostgreSQL pronto para rodar |
+| `docker-compose.yml` | Sobe o sistema inteiro (banco, back-end e front-end) com um comando |
 
-## Como rodar o back-end
+## Como rodar com Docker (recomendado)
 
-**Você vai precisar de:** Java 21, Maven e Docker.
+Esse é o jeito mais fácil: **você só precisa do [Docker Desktop](https://www.docker.com/products/docker-desktop/)**. Não precisa instalar Java, Maven, Node nem PostgreSQL.
 
-1. Suba o banco de dados (na raiz do projeto):
+1. Instale o Docker Desktop e deixe ele aberto (no Windows ele pede o WSL 2 na primeira vez; aceite e reinicie se pedir).
+
+2. Crie o arquivo de configuração e coloque a sua chave do Gemini em `GEMINI_API_KEY` (gerada de graça em https://aistudio.google.com/apikey):
 
    ```bash
-   docker compose up -d
+   cp backend/.env.example backend/.env
+   ```
+
+   No PowerShell: `Copy-Item backend/.env.example backend/.env`. Sem a chave o sistema roda, só as funções de IA ficam indisponíveis.
+
+3. Na raiz do projeto, suba tudo:
+
+   ```bash
+   docker compose up --build
+   ```
+
+   A primeira vez demora alguns minutos (baixa as imagens e as dependências). Nas próximas, `docker compose up` já basta.
+
+4. Abra:
+   - http://localhost:5173 — o sistema (entre com uma das [contas de demonstração](#contas-de-demonstração));
+   - http://localhost:8080/swagger-ui.html — a documentação da API;
+   - http://localhost:8080/api/status — o status do servidor.
+
+Para parar: `Ctrl+C` no terminal ou `docker compose down`. Os dados do banco ficam guardados no volume `smartbudget-data`; para apagar tudo e começar do zero, use `docker compose down -v`.
+
+Se alguma das portas 5173, 8080 ou 5432 já estiver em uso na máquina, mude o número da esquerda no `docker-compose.yml` (por exemplo `5433:5432`).
+
+## Como rodar o back-end sem Docker (para desenvolver)
+
+
+**Você vai precisar de:** Java 21, Maven e Docker (só para o banco).
+
+1. Suba apenas o banco de dados (na raiz do projeto):
+
+   ```bash
+   docker compose up -d postgres
    ```
 
    Se a porta 5432 já estiver ocupada por outro PostgreSQL, mude a porta no `docker-compose.yml` (por exemplo `5433:5432`) e ajuste o `DB_URL` no `.env`.
@@ -142,9 +175,9 @@ docker exec smartbudget-db pg_dump -U smartbudget smartbudget > backup.sql
 
 Para restaurar: `docker exec -i smartbudget-db psql -U smartbudget smartbudget < backup.sql`.
 
-## Como rodar o front-end
+## Como rodar o front-end sem Docker (para desenvolver)
 
-**Você vai precisar de:** Node.js 22 ou mais novo. Suba o back-end antes.
+**Você vai precisar de:** Node.js 22.12 ou mais novo (o Vite não funciona no 22.11 ou anterior). Suba o back-end antes.
 
 ```bash
 cd frontend
