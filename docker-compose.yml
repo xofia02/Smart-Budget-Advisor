@@ -25,16 +25,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Lê a chave do Gemini e as demais variáveis do backend/.env (se existir)
     env_file:
-      - path: ./backend/.env.example
+      - path: ./backend/.env
         required: false
+    # Dentro do Docker o banco é acessado pelo nome do serviço, não por localhost
     environment:
-      DB_URL: jdbc:postgres://postgres:5432/smartbudget
+      DB_URL: jdbc:postgresql://postgres:5432/smartbudget
       DB_USER: smartbudget
       DB_PASSWORD: smartbudget
       FRONTEND_URL: http://localhost:5173
-      ports:
-        - "8000:8000"
+    ports:
+      - "8080:8080"
 
   frontend:
     build:
